@@ -1,0 +1,9 @@
+
+	.gallery.svelte-xxobeb {
+		padding: var(--size-1) var(--size-2);
+	}
+
+	div.svelte-xxobeb {
+		overflow: hidden;
+		white-space: nowrap;
+	}

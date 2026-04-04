@@ -1,0 +1,52 @@
+const _name = "Deutsch";
+const annotated_image = { "annotated_image": "Annotiertes Bild" };
+const audio = { "allow_recording_access": "Bitte erlauben Sie den Zugriff auf das Mikrofon für die Aufnahme.", "audio": "Audio", "record_from_microphone": "Vom Mikrofon aufnehmen", "stop_recording": "Aufnahme stoppen", "no_device_support": "Auf Mediengeräte konnte nicht zugegriffen werden. Stellen Sie sicher, dass Sie sich auf einer sicheren Quelle (https) oder localhost befinden (oder ein gültiges SSL-Zertifikat an ssl_verify übergeben haben) und Sie dem Browser den Zugriff auf Ihr Gerät erlaubt haben.", "stop": "Stopp", "resume": "Fortsetzen", "record": "Aufnehmen", "no_microphone": "Kein Mikrofon gefunden", "pause": "Pause", "play": "Abspielen", "waiting": "Warten", "drop_to_upload": "Laden Sie eine Audiodatei hier ab, um sie hochzuladen." };
+const blocks = { "connection_can_break": "Auf Mobilgeräten kann die Verbindung unterbrochen werden, wenn dieser Tab den Fokus verliert oder das Gerät in den Ruhezustand geht, wodurch Ihre Position in der Warteschlange verloren geht.", "long_requests_queue": "Es gibt eine lange Warteschlange ausstehender Anfragen. Duplizieren Sie diesen Space zum Überspringen.", "lost_connection": "Verbindung durch Verlassen der Seite verloren. Kehre zur Warteschlange zurück...", "waiting_for_inputs": "Warten auf das Hochladen der Datei(en), bitte versuchen Sie es erneut." };
+const checkbox = { "checkbox": "Kontrollkästchen", "checkbox_group": "Kontrollkästchengruppe" };
+const code = { "code": "Code" };
+const color_picker = { "color_picker": "Farbwähler" };
+const common = { "built_with": "erstellt mit", "built_with_gradio": "Mit Gradio erstellt", "clear": "Löschen", "download": "Herunterladen", "edit": "Bearbeiten", "empty": "Leer", "error": "Fehler", "hosted_on": "Gehostet auf", "loading": "Laden", "logo": "Logo", "or": "oder", "remove": "Entfernen", "settings": "Einstellungen", "share": "Teilen", "submit": "Absenden", "undo": "Rückgängig", "no_devices": "Keine Geräte gefunden", "language": "Sprache", "display_theme": "Anzeigedesign", "pwa": "Progressive Web App" };
+const dataframe = { "incorrect_format": "Falsches Format, nur CSV- und TSV-Dateien werden unterstützt", "new_column": "Spalte hinzufügen", "new_row": "Neue Zeile", "add_row_above": "Zeile oben hinzufügen", "add_row_below": "Zeile unten hinzufügen", "add_column_left": "Spalte links hinzufügen", "add_column_right": "Spalte rechts hinzufügen", "delete_row": "Zeile löschen", "delete_column": "Spalte löschen", "sort_column": "Spalte sortieren", "sort_ascending": "Aufsteigend sortieren", "sort_descending": "Absteigend sortieren", "drop_to_upload": "CSV- oder TSV-Dateien hier ablegen, um Daten in den DataFrame zu importieren.", "clear_sort": "Sortierung aufheben" };
+const dropdown = { "dropdown": "Dropdown-Menü" };
+const errors = { "build_error": "Es gibt einen Build-Fehler", "config_error": "Es gibt einen Konfigurationsfehler", "contact_page_author": "Bitte kontaktieren Sie den Autor der Seite.", "no_app_file": "Es gibt keine App-Datei", "runtime_error": "Es gibt einen Laufzeitfehler", "space_not_working": '"Space funktioniert nicht, weil" {0}', "space_paused": "Der Space ist pausiert", "use_via_api": "Über API verwenden" };
+const file = { "uploading": "Hochladen..." };
+const highlighted_text = { "highlighted_text": "Hervorgehobener Text" };
+const image = { "allow_webcam_access": "Bitte erlauben Sie den Zugriff auf die Webcam für die Aufnahme.", "brush_color": "Pinselfarbe", "brush_radius": "Pinselgröße", "image": "Bild", "remove_image": "Bild entfernen", "select_brush_color": "Pinselfarbe auswählen", "start_drawing": "Zeichnen beginnen", "use_brush": "Pinsel verwenden", "drop_to_upload": "Laden Sie ein Bild hier ab, um es hochzuladen." };
+const label = { "label": "Beschriftung" };
+const login = { "enable_cookies": "Wenn Sie einen HuggingFace Space im Inkognito-Modus besuchen, müssen Sie Cookies von Drittanbietern aktivieren.", "incorrect_credentials": "Falsche Anmeldedaten", "username": "Benutzername", "password": "Passwort", "login": "Anmelden" };
+const number = { "number": "Zahl" };
+const plot = { "plot": "Diagramm" };
+const radio = { "radio": "Optionsfeld" };
+const slider = { "slider": "Schieberegler" };
+const upload_text = { "click_to_upload": "Hochladen", "drop_audio": "Audio hier ablegen", "drop_csv": "CSV Datei hier ablegen", "drop_file": "Datei hier ablegen", "drop_image": "Bild hier ablegen", "drop_video": "Video hier ablegen", "drop_gallery": "Medien hier ablegen", "paste_clipboard": "Aus Zwischenablage einfügen" };
+const video = { "drop_to_upload": "Laden Sie eine Video-Datei hier ab, um sie hochzuladen." };
+const chatbot = { "edit": "Bearbeiten", "retry": "Wiederholen", "undo": "Rückgängig", "submit": "Senden", "cancel": "Abbrechen", "like": "Gefällt mir", "dislike": "Gefällt mir nicht", "clear": "Chat leeren" };
+const de = {
+  _name,
+  "3D_model": { "3d_model": "3D-Modell", "drop_to_upload": "Laden Sie eine 3D-Modell-Datei (.obj, .glb, .stl, .gltf, .splat oder .ply) hier ab, um sie hochzuladen." },
+  annotated_image,
+  audio,
+  blocks,
+  checkbox,
+  code,
+  color_picker,
+  common,
+  dataframe,
+  dropdown,
+  errors,
+  file,
+  highlighted_text,
+  image,
+  label,
+  login,
+  number,
+  plot,
+  radio,
+  slider,
+  upload_text,
+  video,
+  chatbot
+};
+
+export { _name, annotated_image, audio, blocks, chatbot, checkbox, code, color_picker, common, dataframe, de as default, dropdown, errors, file, highlighted_text, image, label, login, number, plot, radio, slider, upload_text, video };
+//# sourceMappingURL=de-FmwryDR7.js.map
