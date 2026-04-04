@@ -4,6 +4,8 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 8000
+description: Stateful Linux SRE benchmark for autonomous diagnostics, tuning, and security hardening.
 config:
   env_vars:
     ENABLE_WEB_INTERFACE: "true"
+    LINUX_SRE_GYM_MAX_STEPS: "12"

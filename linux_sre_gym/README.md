@@ -1,255 +1,299 @@
 ---
-title: Linux Sre Gym Environment Server
-emoji: 🎭
+title: Linux SRE Gym
+emoji: 💻
 colorFrom: blue
-colorTo: pink
+colorTo: green
 sdk: docker
 pinned: false
 app_port: 8000
 base_path: /web
 tags:
   - openenv
+  - reinforcement-learning
+  - systems
 ---
 
-# Linux Sre Gym Environment
+# Linux SRE Gym
 
-A simple test environment that echoes back messages. Perfect for testing the env APIs as well as demonstrating environment usage patterns.
+Linux SRE Gym is a pure-Python OpenEnv benchmark for autonomous server diagnostics and remediation. Instead of running commands on a real host, it simulates a Linux machine with mock `procfs`, `sysfs`, `sysctl`, and process-table state, then lets an agent interact through bash-like commands such as `ps aux`, `cat /proc/meminfo`, `sysctl -w ...`, and `kill <pid>`.
 
-## Quick Start
+The goal is to evaluate whether an agent can behave like an SRE: inspect system state safely, form a diagnosis, and apply the right fix without damaging the machine.
 
-The simplest way to use the Linux Sre Gym environment is through the `LinuxSreGymEnv` class:
+## Why This Environment Exists
 
-```python
-from linux_sre_gym import LinuxSreGymAction, LinuxSreGymEnv
+Single-turn code tasks are not enough for operations work. Real infrastructure debugging is sequential and stateful:
 
-try:
-    # Create environment from Docker image
-    linux_sre_gymenv = LinuxSreGymEnv.from_docker_image("linux_sre_gym-env:latest")
+- the agent has to discover hidden state,
+- the next command depends on prior terminal output,
+- remediation must be safe,
+- success depends on the final machine state, not only the last response.
 
-    # Reset
-    result = linux_sre_gymenv.reset()
-    print(f"Reset: {result.observation.echoed_message}")
+Linux SRE Gym targets that gap with three deterministic incidents that escalate from triage to kernel tuning to network hardening.
 
-    # Send multiple messages
-    messages = ["Hello, World!", "Testing echo", "Final message"]
+## Tasks
 
-    for msg in messages:
-        result = linux_sre_gymenv.step(LinuxSreGymAction(message=msg))
-        print(f"Sent: '{msg}'")
-        print(f"  → Echoed: '{result.observation.echoed_message}'")
-        print(f"  → Length: {result.observation.message_length}")
-        print(f"  → Reward: {result.reward}")
+The environment cycles deterministically through three tasks on consecutive `reset()` calls unless `LINUX_SRE_GYM_DEFAULT_TASK` is set.
 
-finally:
-    # Always clean up
-    linux_sre_gymenv.close()
-```
+### 1. Triage
 
-That's it! The `LinuxSreGymEnv.from_docker_image()` method handles:
-- Starting the Docker container
-- Waiting for the server to be ready
-- Connecting to the environment
-- Container cleanup when you call `close()`
+Identify and mitigate a runaway process that is saturating CPU and memory.
 
-## Building the Docker Image
+Expected behaviors:
 
-Before using the environment, you need to build the Docker image:
+- inspect `ps aux`, `top -bn1`, `free -m`, `/proc/meminfo`
+- identify the offender
+- terminate the runaway process without killing protected system services
 
-```bash
-# From project root
-docker build -t linux_sre_gym-env:latest -f server/Dockerfile .
-```
+### 2. Optimization
 
-## Deploying to Hugging Face Spaces
+Resolve disk thrashing caused by bad paging settings.
 
-You can easily deploy your OpenEnv environment to Hugging Face Spaces using the `openenv push` command:
+Expected behaviors:
 
-```bash
-# From the environment directory (where openenv.yaml is located)
-openenv push
+- inspect `vmstat`, `/proc/swaps`, `/proc/meminfo`, `sysctl vm.swappiness`
+- reduce `vm.swappiness`
+- enable `zswap`
+- verify the host is healthier after the changes
 
-# Or specify options
-openenv push --namespace my-org --private
-```
+### 3. Security Hardening
 
-The `openenv push` command will:
-1. Validate that the directory is an OpenEnv environment (checks for `openenv.yaml`)
-2. Prepare a custom build for Hugging Face Docker space (enables web interface)
-3. Upload to Hugging Face (ensuring you're logged in)
+Harden networking so spoofed packets are dropped.
 
-### Prerequisites
+Expected behaviors:
 
-- Authenticate with Hugging Face: The command will prompt for login if not already authenticated
+- inspect `rp_filter` values via `/proc/sys` or `sysctl`
+- set `net.ipv4.conf.all.rp_filter=1`
+- set `net.ipv4.conf.default.rp_filter=1`
+- verify the hardening took effect
 
-### Options
+## Action Space
 
-- `--directory`, `-d`: Directory containing the OpenEnv environment (defaults to current directory)
-- `--repo-id`, `-r`: Repository ID in format 'username/repo-name' (defaults to 'username/env-name' from openenv.yaml)
-- `--base-image`, `-b`: Base Docker image to use (overrides Dockerfile FROM)
-- `--private`: Deploy the space as private (default: public)
+`LinuxSreGymAction`
 
-### Examples
+- `command: str`
 
-```bash
-# Push to your personal namespace (defaults to username/env-name from openenv.yaml)
-openenv push
+The agent sends exactly one bash-like command per step.
 
-# Push to a specific repository
-openenv push --repo-id my-org/my-env
+Supported command families in the built-in simulator:
 
-# Push with a custom base image
-openenv push --base-image ghcr.io/meta-pytorch/openenv-base:latest
+- `ps aux`
+- `top -bn1`
+- `free -m`
+- `vmstat`
+- `cat <path>`
+- `ls <path>`
+- `grep <pattern> <path>`
+- `sysctl <key>`
+- `sysctl -w <key>=<value>`
+- `sysctl -a | grep rp_filter`
+- `echo <value> > <path>`
+- `kill <pid>`
+- `pkill <name>`
 
-# Push as a private space
-openenv push --private
+## Observation Space
 
-# Combine options
-openenv push --repo-id my-org/my-env --base-image custom-base:latest --private
-```
+`LinuxSreGymObservation`
 
-After deployment, your space will be available at:
-`https://huggingface.co/spaces/<repo-id>`
+- `stdout: str`
+- `stderr: str`
+- `exit_code: int`
+- `current_task: str`
+- `step_count: int`
+- `last_reward_reason: str`
+- `available_hint: str | None`
+- `reward: float`
+- `done: bool`
+- `reward_breakdown: LinuxSreGymRewardBreakdown`
+- `metadata: dict`
 
-The deployed space includes:
-- **Web Interface** at `/web` - Interactive UI for exploring the environment
-- **API Documentation** at `/docs` - Full OpenAPI/Swagger interface
-- **Health Check** at `/health` - Container health monitoring
-- **WebSocket** at `/ws` - Persistent session endpoint for low-latency interactions
+This mirrors a terminal interaction while still exposing structured reward details to the agent and evaluator.
 
-## Environment Details
+## State Space
 
-### Action
-**LinuxSreGymAction**: Contains a single field
-- `message` (str) - The message to echo back
+`LinuxSreGymState`
 
-### Observation
-**LinuxSreGymObservation**: Contains the echo response and metadata
-- `echoed_message` (str) - The message echoed back
-- `message_length` (int) - Length of the message
-- `reward` (float) - Reward based on message length (length × 0.1)
-- `done` (bool) - Always False for echo environment
-- `metadata` (dict) - Additional info like step count
+- `episode_id`
+- `task_id`
+- `task_description`
+- `filesystem`
+- `processes`
+- `sysctl`
+- `network`
+- `command_history`
+- `reward_history`
+- `seen_diagnostics`
+- `is_resolved`
+- `terminal_locked`
+- `completion_score`
 
-### Reward
-The reward is calculated as: `message_length × 0.1`
-- "Hi" → reward: 0.2
-- "Hello, World!" → reward: 1.3
-- Empty message → reward: 0.0
+`state()` is intended for debugging and grading, while the agent should primarily reason from observations.
 
-## Advanced Usage
+## Reward Design
 
-### Connecting to an Existing Server
+Reward is dense and rubric-driven instead of binary-only.
 
-If you already have a Linux Sre Gym environment server running, you can connect directly:
+Positive signals:
 
-```python
-from linux_sre_gym import LinuxSreGymEnv
+- first-time diagnostic commands for the active task
+- relevant remediation actions
+- completion bonus when the incident is fully resolved
 
-# Connect to existing server
-linux_sre_gymenv = LinuxSreGymEnv(base_url="<ENV_HTTP_URL_HERE>")
+Negative signals:
 
-# Use as normal
-result = linux_sre_gymenv.reset()
-result = linux_sre_gymenv.step(LinuxSreGymAction(message="Hello!"))
-```
+- repeated low-value commands
+- invalid writes
+- destructive actions such as killing protected processes
 
-Note: When connecting to an existing server, `linux_sre_gymenv.close()` will NOT stop the server.
+Each task also has a deterministic normalized score in `[0.0, 1.0]` used for evaluation.
 
-### Using the Context Manager
+## Project Layout
 
-The client supports context manager usage for automatic connection management:
-
-```python
-from linux_sre_gym import LinuxSreGymAction, LinuxSreGymEnv
-
-# Connect with context manager (auto-connects and closes)
-with LinuxSreGymEnv(base_url="http://localhost:8000") as env:
-    result = env.reset()
-    print(f"Reset: {result.observation.echoed_message}")
-    # Multiple steps with low latency
-    for msg in ["Hello", "World", "!"]:
-        result = env.step(LinuxSreGymAction(message=msg))
-        print(f"Echoed: {result.observation.echoed_message}")
-```
-
-The client uses WebSocket connections for:
-- **Lower latency**: No HTTP connection overhead per request
-- **Persistent session**: Server maintains your environment state
-- **Efficient for episodes**: Better for many sequential steps
-
-### Concurrent WebSocket Sessions
-
-The server supports multiple concurrent WebSocket connections. To enable this,
-modify `server/app.py` to use factory mode:
-
-```python
-# In server/app.py - use factory mode for concurrent sessions
-app = create_app(
-    LinuxSreGymEnvironment,  # Pass class, not instance
-    LinuxSreGymAction,
-    LinuxSreGymObservation,
-    max_concurrent_envs=4,  # Allow 4 concurrent sessions
-)
-```
-
-Then multiple clients can connect simultaneously:
-
-```python
-from linux_sre_gym import LinuxSreGymAction, LinuxSreGymEnv
-from concurrent.futures import ThreadPoolExecutor
-
-def run_episode(client_id: int):
-    with LinuxSreGymEnv(base_url="http://localhost:8000") as env:
-        result = env.reset()
-        for i in range(10):
-            result = env.step(LinuxSreGymAction(message=f"Client {client_id}, step {i}"))
-        return client_id, result.observation.message_length
-
-# Run 4 episodes concurrently
-with ThreadPoolExecutor(max_workers=4) as executor:
-    results = list(executor.map(run_episode, range(4)))
-```
-
-## Development & Testing
-
-### Direct Environment Testing
-
-Test the environment logic directly without starting the HTTP server:
-
-```bash
-# From the server directory
-python3 server/linux_sre_gym_environment.py
-```
-
-This verifies that:
-- Environment resets correctly
-- Step executes actions properly
-- State tracking works
-- Rewards are calculated correctly
-
-### Running Locally
-
-Run the server locally for development:
-
-```bash
-uvicorn server.app:app --reload
-```
-
-## Project Structure
-
-```
+```text
 linux_sre_gym/
-├── .dockerignore         # Docker build exclusions
-├── __init__.py            # Module exports
-├── README.md              # This file
-├── openenv.yaml           # OpenEnv manifest
-├── pyproject.toml         # Project metadata and dependencies
-├── uv.lock                # Locked dependencies (generated)
-├── client.py              # LinuxSreGymEnv client
-├── models.py              # Action and Observation models
+├── __init__.py
+├── client.py
+├── models.py
+├── openenv.yaml
+├── README.md
+├── simulator/
+├── tasks/
+├── graders/
 └── server/
-    ├── __init__.py        # Server module exports
-    ├── linux_sre_gym_environment.py  # Core environment logic
-    ├── app.py             # FastAPI application (HTTP + WebSocket endpoints)
-    └── Dockerfile         # Container image definition
+    ├── app.py
+    └── linux_sre_gym_environment.py
 ```
+
+The current server includes a built-in deterministic fallback simulator and grader so the environment remains runnable while the dedicated `simulator/`, `tasks/`, and `graders/` modules evolve.
+
+## Local Setup
+
+```bash
+cd linux_sre_gym
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+If you want the full dev toolchain:
+
+```bash
+pip install -e ".[dev]"
+```
+
+## Run the Server Locally
+
+```bash
+cd linux_sre_gym
+uvicorn server.app:app --host 0.0.0.0 --port 8000
+```
+
+Important endpoints:
+
+- `POST /reset`
+- `POST /step`
+- `GET /state`
+- `GET /docs`
+- `GET /health`
+- `WS /ws`
+
+## Python Client Example
+
+```python
+from linux_sre_gym import LinuxSreGymAction, LinuxSreGymEnv
+
+with LinuxSreGymEnv(base_url="http://127.0.0.1:8000") as env:
+    result = env.reset()
+    print(result.observation.current_task)
+    print(result.observation.stdout)
+
+    result = env.step(LinuxSreGymAction(command="ps aux"))
+    print(result.observation.stdout)
+    print(result.reward, result.done)
+```
+
+## Docker
+
+Build:
+
+```bash
+cd linux_sre_gym
+docker build -t linux-sre-gym:latest .
+```
+
+Run:
+
+```bash
+docker run --rm -p 8000:8000 linux-sre-gym:latest
+```
+
+## OpenEnv Validation
+
+Run the validator from the environment directory:
+
+```bash
+cd linux_sre_gym
+openenv validate
+```
+
+The hackathon validation flow also expects:
+
+- a working Docker build
+- a deployed HF Space responding to `POST /reset`
+- a root-level `inference.py`
+
+## Baseline Inference
+
+The required inference entrypoint lives at the repository root:
+
+- [`inference.py`](/Users/yashaswini/openENV/inference.py)
+
+Required environment variables:
+
+- `API_BASE_URL`
+- `MODEL_NAME`
+- `HF_TOKEN`
+
+Optional:
+
+- `LOCAL_IMAGE_NAME` to launch the env from a local Docker image
+- `ENV_BASE_URL` to connect to an already-running server
+- `LINUX_SRE_GYM_MAX_STEPS`
+- `SUCCESS_SCORE_THRESHOLD`
+
+Run it from the repo root:
+
+```bash
+python3 inference.py
+```
+
+The script emits only the hackathon-required structured logs:
+
+- `[START]`
+- `[STEP]`
+- `[END]`
+
+## Hugging Face Spaces Deployment
+
+This repo is configured for Docker-based HF Spaces. From the environment directory:
+
+```bash
+cd linux_sre_gym
+openenv push
+```
+
+Or build and push manually using your Space's Docker workflow.
+
+## Baseline Score Expectations
+
+Because the benchmark is deterministic, a good baseline should consistently:
+
+- solve Triage completely,
+- solve Optimization completely,
+- solve Security Hardening completely,
+- produce per-task scores close to `1.0` when the correct command sequence is used.
+
+Exact scores depend on model behavior, but the grader itself is deterministic for a fixed trajectory.
+
+## Safety Model
+
+This environment does not execute host shell commands. All commands are parsed and interpreted inside Python against simulated machine state. That keeps the benchmark safe to run locally, inside CI, and on Hugging Face Spaces without privileged access.

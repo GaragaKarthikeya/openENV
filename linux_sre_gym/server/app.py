@@ -36,11 +36,16 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 try:
-    from ..models import LinuxSreGymAction, LinuxSreGymObservation
+    from .. import models as _models
     from .linux_sre_gym_environment import LinuxSreGymEnvironment
 except ModuleNotFoundError:
-    from models import LinuxSreGymAction, LinuxSreGymObservation
+    import models as _models  # type: ignore[no-redef]
     from server.linux_sre_gym_environment import LinuxSreGymEnvironment
+
+LinuxSreGymAction = getattr(_models, "LinuxSreGymAction", getattr(_models, "Action"))
+LinuxSreGymObservation = getattr(
+    _models, "LinuxSreGymObservation", getattr(_models, "Observation")
+)
 
 
 # Create the app with web interface and README integration
