@@ -1,0 +1,16 @@
+
+	.html-container.svelte-1jts93g {
+		padding: var(--block-padding);
+	}
+
+	.label-padding.svelte-1jts93g {
+		padding-top: var(--spacing-xxl);
+	}
+
+	div.svelte-1jts93g {
+		transition: 150ms;
+	}
+
+	.pending.svelte-1jts93g {
+		opacity: 0.2;
+	}
