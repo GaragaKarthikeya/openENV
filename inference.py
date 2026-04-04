@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import textwrap
 from pathlib import Path
 from typing import List, Optional
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
@@ -30,20 +31,23 @@ SUCCESS_SCORE_THRESHOLD = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.85"))
 
 SYSTEM_PROMPT = textwrap.dedent(
     """
-    You are a Linux SRE agent operating a simulated host.
-    Reply with exactly one Linux command and nothing else.
-    Prefer safe diagnosis before mutation.
-    Supported commands include:
-    - ps aux
-    - top -bn1
-    - free -m
-    - vmstat
-    - cat <path>
-    - sysctl <key>
+    You are a senior Linux SRE agent. Your goal is to diagnose and resolve system incidents.
+    
+    RULES:
+    1. Reply with EXACTLY one Linux command and nothing else. No preamble, no explanation.
+    2. Prefer safe diagnosis (ps, top, vmstat, free) before mutation.
+    3. MANDATORY: For all sysctl updates, you MUST use 'sysctl -w key=value'.
+    4. MANDATORY: To enable zswap, use 'echo Y > /sys/module/zswap/parameters/enabled'.
+    5. DECISIVENESS: Once you have identified a runaway PID or a misconfiguration, ACT immediately to fix it. Do not repeat the same diagnostic command twice.
+    6. VERIFICATION: After applying a fix, run one final diagnostic command to verify the change.
+    
+    SUPPORTED COMMANDS:
+    - ps aux, top -bn1, free -m, vmstat
+    - cat <path>, ls <path>
+    - sysctl <key>, sysctl -a | grep <pattern>
     - sysctl -w <key>=<value>
     - echo <value> > <path>
-    - kill <pid>
-    - pkill <name>
+    - kill <pid>, pkill <name>
     """
 ).strip()
 
@@ -128,8 +132,8 @@ def _heuristic_command(task_name: str, history: List[str]) -> str:
     return sequence[index]
 
 
-def get_model_command(
-    client: OpenAI,
+async def get_model_command(
+    client: AsyncOpenAI,
     task_name: str,
     step: int,
     stdout: str,
@@ -139,7 +143,7 @@ def get_model_command(
 ) -> str:
     prompt = build_user_prompt(task_name, step, stdout, stderr, score, history)
     try:
-        completion = client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -160,7 +164,7 @@ def create_env() -> LinuxSreGymEnv:
     return LinuxSreGymEnv(base_url=ENV_BASE_URL)
 
 
-def run_episode(client: OpenAI, env: LinuxSreGymEnv) -> float:
+async def run_episode(client: AsyncOpenAI, env: LinuxSreGymEnv) -> float:
     rewards: List[float] = []
     history: List[str] = []
     steps_taken = 0
@@ -170,7 +174,7 @@ def run_episode(client: OpenAI, env: LinuxSreGymEnv) -> float:
     log_started = False
 
     try:
-        result = env.reset()
+        result = await env.reset()
         observation = result.observation
         task_name = observation.current_task
         log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
@@ -178,13 +182,13 @@ def run_episode(client: OpenAI, env: LinuxSreGymEnv) -> float:
 
         stdout = observation.stdout
         stderr = observation.stderr
-        score = float(observation.metadata.get("score", 0.0))
+        score = float(getattr(observation, "reward_breakdown", observation).score) if hasattr(getattr(observation, "reward_breakdown", None), "score") else float(observation.metadata.get("score", 0.0))
 
         for step in range(1, MAX_STEPS + 1):
             if result.done:
                 break
 
-            command = get_model_command(
+            command = await get_model_command(
                 client=client,
                 task_name=task_name,
                 step=step,
@@ -194,12 +198,13 @@ def run_episode(client: OpenAI, env: LinuxSreGymEnv) -> float:
                 history=history,
             )
 
-            result = env.step(LinuxSreGymAction(command=command))
+            result = await env.step(LinuxSreGymAction(command=command))
             observation = result.observation
             reward = float(result.reward or 0.0)
             rewards.append(reward)
             steps_taken = step
-            score = float(observation.metadata.get("score", score))
+            score = float(getattr(observation, "reward_breakdown", observation).score) if hasattr(getattr(observation, "reward_breakdown", None), "score") else float(observation.metadata.get("score", score))
+            print(f"DEBUG: step={step} command={command} metadata={observation.metadata} computed_score={score}")
             stdout = observation.stdout
             stderr = observation.stderr
             error = observation.stderr or observation.metadata.get("last_action_error")
@@ -217,15 +222,15 @@ def run_episode(client: OpenAI, env: LinuxSreGymEnv) -> float:
         log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
 
-def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY or "missing-key")
+async def main() -> None:
+    client = AsyncOpenAI(base_url=API_BASE_URL, api_key=API_KEY or "missing-key")
     env = create_env()
     try:
-        scores = [run_episode(client, env) for _ in range(TASK_COUNT)]
+        scores = [await run_episode(client, env) for _ in range(TASK_COUNT)]
         _ = scores
     finally:
-        env.close()
+        await env.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

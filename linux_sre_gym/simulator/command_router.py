@@ -109,6 +109,8 @@ class CommandRouter:
         try:
             return handler(tokens, state)
         except Exception as exc:  # pragma: no cover — safety net
+            import traceback
+            traceback.print_exc()
             return CommandResult(stderr=f"{cmd}: error: {exc}", exit_code=1)
 
     # =================================================================

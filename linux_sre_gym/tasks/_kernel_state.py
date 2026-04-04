@@ -52,7 +52,7 @@ def put_process(
     killable: bool = True,
 ) -> None:
     processes = _as_mapping_attr(state, "processes")
-    processes[pid] = {
+    process_dict = {
         "pid": pid,
         "name": name,
         "cpu_percent": cpu_percent,
@@ -60,6 +60,14 @@ def put_process(
         "status": status,
         "killable": killable,
     }
+    if isinstance(processes, list):
+        try:
+            from linux_sre_gym.simulator.kernel_state import ProcessEntry
+            processes.append(ProcessEntry(**process_dict))
+        except ImportError:
+            processes.append(process_dict)
+    else:
+        processes[pid] = process_dict
 
 
 def put_file(state: Any, path: str, content: str) -> None:
@@ -71,7 +79,7 @@ def put_sysctl(state: Any, key: str, value: Any) -> None:
 
 
 def put_network_flag(state: Any, key: str, value: Any) -> None:
-    _as_mapping_attr(state, "network")[key] = value
+    _as_mapping_attr(state, "runtime_flags")[key] = value
 
 
 def put_runtime_flag(state: Any, key: str, value: Any) -> None:

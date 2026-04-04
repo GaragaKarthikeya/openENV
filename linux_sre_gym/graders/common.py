@@ -30,6 +30,8 @@ def read_state_value(state: Any, field_name: str, default: Any = None) -> Any:
 
 def read_mapping(state: Any, field_name: str) -> dict[Any, Any]:
     value = read_state_value(state, field_name, {})
+    if not value and field_name == "runtime_flags":
+        value = read_state_value(state, "network", {})
     return dict(value) if isinstance(value, Mapping) else {}
 
 

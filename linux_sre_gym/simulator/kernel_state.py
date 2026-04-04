@@ -318,7 +318,7 @@ class KernelState:
         """Write every sysctl key that has a known filesystem path."""
         for key, path in _SYSCTL_PATH_MAP.items():
             if key in self.sysctl:
-                self.filesystem[path] = self.sysctl[key] + "\n"
+                self.filesystem[path] = str(self.sysctl[key]) + "\n"
 
     # -- /sys/module/zswap/parameters/enabled -------------------------------
 
@@ -386,12 +386,14 @@ class KernelState:
         # Update runtime flags
         if target.cpu_percent > 50.0 or target.memory_mb > 2000:
             self.runtime_flags["runaway_process_present"] = False
+            self.runtime_flags["thrashing"] = False
             # Reduce load
             self.load_avg = (
                 max(0.1, self.load_avg[0] - target.cpu_percent / 100 * self.cpu_count),
                 max(0.1, self.load_avg[1] - target.cpu_percent / 120 * self.cpu_count),
                 self.load_avg[2],  # 15-min avg hasn't caught up yet
             )
+            self.runtime_flags["load_average_1m"] = self.load_avg[0]
             self.runtime_flags["service_health_score"] = min(
                 1.0, self.runtime_flags["service_health_score"] + 0.4
             )
@@ -479,7 +481,7 @@ class KernelState:
             # Side-effects
             if v <= 30:
                 self.runtime_flags["thrashing"] = False
-                self.swap_used_mb = max(0, self.swap_used_mb - self.swap_used_mb // 2)
+                self.swap_used_mb = max(0, int(self.swap_used_mb) - int(self.swap_used_mb) // 2)
             self.dmesg.append(f"[{self._next_dmesg_ts()}] sysctl: vm.swappiness set to {value}")
 
         elif key in ("net.ipv4.conf.all.rp_filter", "net.ipv4.conf.default.rp_filter"):
@@ -510,8 +512,8 @@ class KernelState:
     def _recalculate_metrics_after_kill(self, killed: ProcessEntry) -> None:
         """Reclaim memory from a killed process."""
         self.free_memory_mb = min(
-            self.total_memory_mb,
-            self.free_memory_mb + int(killed.memory_mb),
+            int(self.total_memory_mb),
+            int(self.free_memory_mb) + int(killed.memory_mb),
         )
 
     def _next_dmesg_ts(self) -> str:

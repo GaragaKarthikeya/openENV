@@ -1,1 +1,11 @@
 GEMINI.MD
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.uv/
+venv/
+.venv/
+linux_sre_gym/**/__pycache__/

@@ -53,7 +53,7 @@ TASK_DESCRIPTIONS = {
 }
 TASK_HINTS = {
     "triage": "Start with process and memory inspection commands such as ps, top, and free -m.",
-    "optimization": "Use vmstat, /proc/meminfo, /proc/swaps, and sysctl to inspect paging pressure.",
+    "optimization": "Use vmstat, /proc/meminfo, /proc/swaps, and sysctl to inspect paging pressure. Zswap is also a useful tuning mechanism.",
     "security": "Inspect rp_filter under /proc/sys or via sysctl before writing any networking setting.",
 }
 DISCOVERY_COMMANDS = {
@@ -169,6 +169,15 @@ class LinuxSreGymEnvironment(Environment):
 
         was_resolved_before = self._state.is_resolved
         result = self._dispatch_command(command)
+        if getattr(self, "_simulator_state", None) is not None:
+            coerced = self._coerce_external_state(self._simulator_state, self._state.task_id)
+            if coerced:
+                self._state.processes = coerced.processes
+                self._state.filesystem = coerced.filesystem
+                self._state.sysctl = coerced.sysctl
+                self._state.network = coerced.network
+                self._state.terminal_locked = coerced.terminal_locked
+                
         if result.stderr:
             self._state.last_action_error = result.stderr
         else:
@@ -210,9 +219,11 @@ class LinuxSreGymEnvironment(Environment):
         return TASK_ORDER[self._reset_count % len(TASK_ORDER)]
 
     def _make_task_state(self, task_id: str) -> LinuxSreGymState:
+        self._simulator_state = None
         external_builder = self._load_task_builder(task_id)
         if external_builder is not None:
             maybe_state = self._invoke_external_builder(external_builder, task_id)
+            self._simulator_state = maybe_state
             coerced_state = self._coerce_external_state(maybe_state, task_id)
             if coerced_state is not None:
                 return coerced_state
@@ -353,19 +364,20 @@ class LinuxSreGymEnvironment(Environment):
         )
 
     def _refresh_derived_views(self, state: LinuxSreGymState) -> None:
-        state.filesystem["/proc/sys/vm/swappiness"] = state.sysctl.get("vm.swappiness", "60")
-        state.filesystem["/sys/module/zswap/parameters/enabled"] = state.sysctl.get(
-            "vm.zswap_enabled", "N"
-        )
-        state.filesystem["/proc/sys/net/ipv4/conf/all/rp_filter"] = state.sysctl.get(
-            "net.ipv4.conf.all.rp_filter", "0"
-        )
-        state.filesystem["/proc/sys/net/ipv4/conf/default/rp_filter"] = state.sysctl.get(
-            "net.ipv4.conf.default.rp_filter", "0"
-        )
-        state.filesystem["/proc/loadavg"] = self._render_loadavg(state)
-        state.filesystem["/proc/meminfo"] = self._render_meminfo(state)
-        state.filesystem["/proc/swaps"] = self._render_swaps(state)
+        if getattr(self, "_simulator_state", None) is None:
+            state.filesystem["/proc/sys/vm/swappiness"] = state.sysctl.get("vm.swappiness", "60")
+            state.filesystem["/sys/module/zswap/parameters/enabled"] = state.sysctl.get(
+                "vm.zswap_enabled", "N"
+            )
+            state.filesystem["/proc/sys/net/ipv4/conf/all/rp_filter"] = state.sysctl.get(
+                "net.ipv4.conf.all.rp_filter", "0"
+            )
+            state.filesystem["/proc/sys/net/ipv4/conf/default/rp_filter"] = state.sysctl.get(
+                "net.ipv4.conf.default.rp_filter", "0"
+            )
+            state.filesystem["/proc/loadavg"] = self._render_loadavg(state)
+            state.filesystem["/proc/meminfo"] = self._render_meminfo(state)
+            state.filesystem["/proc/swaps"] = self._render_swaps(state)
         state.is_resolved = self._evaluate_resolved(state)
         state.completion_score = self._grade_state(state)
 
@@ -834,7 +846,7 @@ class LinuxSreGymEnvironment(Environment):
                     candidate = getattr(module, attr_name, None)
                     if isinstance(candidate, kernel_state_cls):
                         return lambda _task_id, value=candidate: value
-            for attr_name in ("build_task_state", "create_task_state", "create_initial_state", "build_initial_state"):
+            for attr_name in ("build_task_state", "create_task_state", "create_initial_state", "build_initial_state", "create_task", f"build_{task_id}_state"):
                 candidate = getattr(module, attr_name, None)
                 if callable(candidate):
                     return candidate
@@ -885,6 +897,15 @@ class LinuxSreGymEnvironment(Environment):
         if isinstance(raw, tuple) and len(raw) >= 3:
             stdout, stderr, exit_code = raw[:3]
             return CommandResult(stdout=str(stdout), stderr=str(stderr), exit_code=int(exit_code))
+        if hasattr(raw, "__dataclass_fields__"):
+            return CommandResult(
+                stdout=str(getattr(raw, "stdout", "")),
+                stderr=str(getattr(raw, "stderr", "")),
+                exit_code=int(getattr(raw, "exit_code", 0)),
+                progress_reward=float(getattr(raw, "progress_reward", 0.0)),
+                safety_penalty=float(getattr(raw, "safety_penalty", 0.0)),
+                reward_reason=str(getattr(raw, "reward_reason", "Command processed.")),
+            )
         if isinstance(raw, dict):
             return CommandResult(
                 stdout=str(raw.get("stdout", "")),
@@ -1044,6 +1065,9 @@ class LinuxSreGymEnvironment(Environment):
         return None
 
     def _export_state_for_external_router(self) -> Any:
+        if getattr(self, "_simulator_state", None) is not None:
+            return self._simulator_state
+
         kernel_state_cls = self._load_kernel_state_class()
         state_payload = self._model_to_dict(self._state)
         if kernel_state_cls is None:
@@ -1063,10 +1087,10 @@ class LinuxSreGymEnvironment(Environment):
     def _invoke_router(self, candidate: Callable[..., Any], command: str) -> Any:
         current_state = self._export_state_for_external_router()
         candidate_args = (
-            (command, self._state),
-            (self._state, command),
             (command, current_state),
             (current_state, command),
+            (command, self._state),
+            (self._state, command),
             (command,),
         )
         for args in candidate_args:
