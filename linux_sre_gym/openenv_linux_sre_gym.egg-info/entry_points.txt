@@ -1,0 +1,2 @@
+[console_scripts]
+server = linux_sre_gym.server.app:main

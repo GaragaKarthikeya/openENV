@@ -1,0 +1,9 @@
+spec_version: 1
+name: linux_sre_gym
+type: space
+runtime: fastapi
+app: server.app:app
+port: 8000
+config:
+  env_vars:
+    ENABLE_WEB_INTERFACE: "true"
