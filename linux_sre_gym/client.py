@@ -1,99 +1,70 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
+"""Client for interacting with the Linux SRE Gym server."""
 
-"""Linux Sre Gym Environment Client."""
+from dataclasses import dataclass
+from typing import Any, Dict, Generic, TypeVar
 
-from typing import Dict
+try:
+    from openenv.core import EnvClient
+    from openenv.core.client_types import StepResult
+except ImportError:  # pragma: no cover
+    A = TypeVar("A")
+    O = TypeVar("O")
+    S = TypeVar("S")
 
-from openenv.core import EnvClient
-from openenv.core.client_types import StepResult
-from openenv.core.env_server.types import State
+    class EnvClient(Generic[A, O, S]):  # type: ignore[misc]
+        """Fallback stub used when openenv is not installed locally."""
 
-from .models import LinuxSreGymAction, LinuxSreGymObservation
+    @dataclass
+    class StepResult(Generic[O]):
+        observation: O
+        reward: float | None = None
+        done: bool = False
+
+from . import models as _models
+
+LinuxSreGymAction = getattr(_models, "LinuxSreGymAction", getattr(_models, "Action"))
+LinuxSreGymObservation = getattr(
+    _models, "LinuxSreGymObservation", getattr(_models, "Observation")
+)
+LinuxSreGymState = getattr(_models, "LinuxSreGymState", getattr(_models, "State"))
+LinuxSreGymRewardBreakdown = getattr(
+    _models,
+    "LinuxSreGymRewardBreakdown",
+    getattr(_models, "RewardBreakdown", None),
+)
 
 
 class LinuxSreGymEnv(
-    EnvClient[LinuxSreGymAction, LinuxSreGymObservation, State]
+    EnvClient[LinuxSreGymAction, LinuxSreGymObservation, LinuxSreGymState]
 ):
-    """
-    Client for the Linux Sre Gym Environment.
+    """Typed OpenEnv client for Linux SRE Gym."""
 
-    This client maintains a persistent WebSocket connection to the environment server,
-    enabling efficient multi-step interactions with lower latency.
-    Each client instance has its own dedicated environment session on the server.
+    def _step_payload(self, action: LinuxSreGymAction) -> Dict[str, Any]:
+        return {"command": action.command}
 
-    Example:
-        >>> # Connect to a running server
-        >>> with LinuxSreGymEnv(base_url="http://localhost:8000") as client:
-        ...     result = client.reset()
-        ...     print(result.observation.echoed_message)
-        ...
-        ...     result = client.step(LinuxSreGymAction(message="Hello!"))
-        ...     print(result.observation.echoed_message)
-
-    Example with Docker:
-        >>> # Automatically start container and connect
-        >>> client = LinuxSreGymEnv.from_docker_image("linux_sre_gym-env:latest")
-        >>> try:
-        ...     result = client.reset()
-        ...     result = client.step(LinuxSreGymAction(message="Test"))
-        ... finally:
-        ...     client.close()
-    """
-
-    def _step_payload(self, action: LinuxSreGymAction) -> Dict:
-        """
-        Convert LinuxSreGymAction to JSON payload for step message.
-
-        Args:
-            action: LinuxSreGymAction instance
-
-        Returns:
-            Dictionary representation suitable for JSON encoding
-        """
-        return {
-            "message": action.message,
-        }
-
-    def _parse_result(self, payload: Dict) -> StepResult[LinuxSreGymObservation]:
-        """
-        Parse server response into StepResult[LinuxSreGymObservation].
-
-        Args:
-            payload: JSON response data from server
-
-        Returns:
-            StepResult with LinuxSreGymObservation
-        """
+    def _parse_result(self, payload: Dict[str, Any]) -> StepResult[LinuxSreGymObservation]:
         obs_data = payload.get("observation", {})
         observation = LinuxSreGymObservation(
-            echoed_message=obs_data.get("echoed_message", ""),
-            message_length=obs_data.get("message_length", 0),
-            done=payload.get("done", False),
-            reward=payload.get("reward"),
+            stdout=obs_data.get("stdout", ""),
+            stderr=obs_data.get("stderr", ""),
+            exit_code=obs_data.get("exit_code", payload.get("exit_code", 0)),
+            current_task=obs_data.get("current_task", payload.get("task_id", "triage")),
+            step_count=obs_data.get("step_count", payload.get("step_count", 0)),
+            last_reward_reason=obs_data.get("last_reward_reason", ""),
+            available_hint=obs_data.get("available_hint"),
+            reward=payload.get("reward", obs_data.get("reward", 0.0)) or 0.0,
+            done=payload.get("done", obs_data.get("done", False)),
+            reward_breakdown=LinuxSreGymRewardBreakdown(
+                **obs_data.get("reward_breakdown", {})
+            ),
             metadata=obs_data.get("metadata", {}),
         )
 
         return StepResult(
             observation=observation,
-            reward=payload.get("reward"),
-            done=payload.get("done", False),
+            reward=payload.get("reward", observation.reward),
+            done=payload.get("done", observation.done),
         )
 
-    def _parse_state(self, payload: Dict) -> State:
-        """
-        Parse server response into State object.
-
-        Args:
-            payload: JSON response from state request
-
-        Returns:
-            State object with episode_id and step_count
-        """
-        return State(
-            episode_id=payload.get("episode_id"),
-            step_count=payload.get("step_count", 0),
-        )
+    def _parse_state(self, payload: Dict[str, Any]) -> LinuxSreGymState:
+        return LinuxSreGymState(**payload)

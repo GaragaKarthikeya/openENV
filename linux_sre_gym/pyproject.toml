@@ -26,6 +26,7 @@ dependencies = [
     # "gymnasium>=0.29.0",
     # "openspiel>=1.0.0",
     # "smolagents>=1.22.0,<2",
+    "openai>=1.50.0",
 ]
 
 [project.optional-dependencies]
@@ -41,5 +42,17 @@ server = "linux_sre_gym.server.app:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = ["linux_sre_gym", "linux_sre_gym.server"]
-package-dir = { "linux_sre_gym" = ".", "linux_sre_gym.server" = "server" }
+packages = [
+    "linux_sre_gym",
+    "linux_sre_gym.server",
+    "linux_sre_gym.simulator",
+    "linux_sre_gym.tasks",
+    "linux_sre_gym.graders",
+]
+package-dir = {
+    "linux_sre_gym" = ".",
+    "linux_sre_gym.server" = "server",
+    "linux_sre_gym.simulator" = "simulator",
+    "linux_sre_gym.tasks" = "tasks",
+    "linux_sre_gym.graders" = "graders",
+}
