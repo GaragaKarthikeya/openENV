@@ -23,12 +23,12 @@ if str(ROOT) not in sys.path:
 
 from linux_sre_gym import LinuxSreGymAction, LinuxSreGymEnv  # noqa: E402
 
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") or os.getenv("IMAGE_NAME")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 HF_TOKEN = os.getenv("HF_TOKEN")
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
+API_KEY = HF_TOKEN or os.getenv("API_KEY")
 
-API_KEY = HF_TOKEN
+if API_KEY is None:
+    raise ValueError("HF_TOKEN or API_KEY environment variable is required")
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "google/gemma-4-31B-it"
 BENCHMARK = os.getenv("LINUX_SRE_GYM_BENCHMARK") or "linux_sre_gym"
