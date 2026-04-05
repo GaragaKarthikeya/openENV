@@ -36,7 +36,7 @@ LinuxSreGymRewardBreakdown = getattr(
 LinuxSreGymState = getattr(_models, "LinuxSreGymState", getattr(_models, "State"))
 
 
-TASK_ORDER = ("triage", "optimization", "security")
+TASK_ORDER = ("triage", "security", "optimization")
 TASK_DESCRIPTIONS = {
     "triage": (
         "A runaway user workload is starving CPU and memory. Identify the offender "

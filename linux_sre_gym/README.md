@@ -44,18 +44,7 @@ Expected behaviors:
 - identify the offender
 - terminate the runaway process without killing protected system services
 
-### 2. Optimization
-
-Resolve disk thrashing caused by bad paging settings.
-
-Expected behaviors:
-
-- inspect `vmstat`, `/proc/swaps`, `/proc/meminfo`, `sysctl vm.swappiness`
-- reduce `vm.swappiness`
-- enable `zswap`
-- verify the host is healthier after the changes
-
-### 3. Security Hardening
+### 2. Security Hardening
 
 Harden networking so spoofed packets are dropped.
 
@@ -65,6 +54,17 @@ Expected behaviors:
 - set `net.ipv4.conf.all.rp_filter=1`
 - set `net.ipv4.conf.default.rp_filter=1`
 - verify the hardening took effect
+
+### 3. Optimization
+
+Resolve disk thrashing caused by bad paging settings.
+
+Expected behaviors:
+
+- inspect `vmstat`, `/proc/swaps`, `/proc/meminfo`, `sysctl vm.swappiness`
+- reduce `vm.swappiness`
+- enable `zswap`
+- verify the host is healthier after the changes
 
 ## Action Space
 

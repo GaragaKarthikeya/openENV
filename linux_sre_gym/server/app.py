@@ -38,7 +38,7 @@ except Exception as e:  # pragma: no cover
 try:
     from .. import models as _models
     from .linux_sre_gym_environment import LinuxSreGymEnvironment
-except ModuleNotFoundError:
+except ImportError:
     import models as _models  # type: ignore[no-redef]
     from server.linux_sre_gym_environment import LinuxSreGymEnvironment
 
