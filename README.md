@@ -1,6 +1,5 @@
 ---
 title: Linux SRE Gym
-emoji: 💻
 colorFrom: blue
 colorTo: green
 sdk: docker
@@ -149,12 +148,15 @@ Each task also has a deterministic normalized score in `[0.0, 1.0]` used for eva
 ## Project Layout
 
 ```text
-linux_sre_gym/
+.
 ├── __init__.py
 ├── client.py
 ├── models.py
 ├── openenv.yaml
+├── pyproject.toml
 ├── README.md
+├── Dockerfile
+├── inference.py
 ├── simulator/
 ├── tasks/
 ├── graders/
@@ -163,7 +165,7 @@ linux_sre_gym/
     └── linux_sre_gym_environment.py
 ```
 
-The current server includes a built-in deterministic fallback simulator and grader so the environment remains runnable while the dedicated `simulator/`, `tasks/`, and `graders/` modules evolve.
+The server includes a built-in deterministic simulator and grader as the default backend.
 
 ## Local Setup
 
@@ -243,9 +245,7 @@ The hackathon validation flow also expects:
 
 ## Baseline Inference
 
-The required inference entrypoint lives at the repository root:
-
-- [`inference.py`](/Users/yashaswini/openENV/inference.py)
+- [`inference.py`](./inference.py)
 
 Required environment variables:
 
