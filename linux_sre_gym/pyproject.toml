@@ -49,10 +49,9 @@ packages = [
     "linux_sre_gym.tasks",
     "linux_sre_gym.graders",
 ]
-package-dir = {
-    "linux_sre_gym" = ".",
-    "linux_sre_gym.server" = "server",
-    "linux_sre_gym.simulator" = "simulator",
-    "linux_sre_gym.tasks" = "tasks",
-    "linux_sre_gym.graders" = "graders",
-}
+[tool.setuptools.package-dir]
+"linux_sre_gym" = "."
+"linux_sre_gym.server" = "server"
+"linux_sre_gym.simulator" = "simulator"
+"linux_sre_gym.tasks" = "tasks"
+"linux_sre_gym.graders" = "graders"

@@ -48,20 +48,20 @@ class SecurityGrader:
 
     def grade(self, state: Any, action_history: Sequence[str] | None = None) -> float:
         commands = read_commands(state, action_history)
-        network = read_mapping(state, "network")
+        runtime_flags = read_mapping(state, "runtime_flags")
 
         score = 0.0
         if self._diagnosed_before_mutation(commands):
             score += 0.15
-        if self._rp_filter_enabled(state, "net.ipv4.conf.all.rp_filter", network.get("rp_filter_all")):
+        if self._rp_filter_enabled(state, "net.ipv4.conf.all.rp_filter", runtime_flags.get("rp_filter_all")):
             score += 0.25
         if self._rp_filter_enabled(
             state,
             "net.ipv4.conf.default.rp_filter",
-            network.get("rp_filter_default"),
+            runtime_flags.get("rp_filter_default"),
         ):
             score += 0.25
-        if bool(network.get("spoofing_protection_enabled", False)) or self._all_filters_enabled(state):
+        if bool(runtime_flags.get("spoofing_protection_enabled", False)) or self._all_filters_enabled(state):
             score += 0.25
         if self._verified_after_mutation(commands):
             score += 0.1

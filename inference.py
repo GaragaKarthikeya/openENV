@@ -11,6 +11,12 @@ from typing import List, Optional
 
 from openai import AsyncOpenAI
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -18,9 +24,13 @@ if str(ROOT) not in sys.path:
 from linux_sre_gym import LinuxSreGymAction, LinuxSreGymEnv  # noqa: E402
 
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME") or os.getenv("IMAGE_NAME")
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")
+HF_TOKEN = os.getenv("HF_TOKEN")
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
+API_KEY = HF_TOKEN
 API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+MODEL_NAME = os.getenv("MODEL_NAME") or "google/gemma-4-31B-it"
 BENCHMARK = os.getenv("LINUX_SRE_GYM_BENCHMARK") or "linux_sre_gym"
 ENV_BASE_URL = os.getenv("ENV_BASE_URL") or "http://127.0.0.1:8000"
 MAX_STEPS = int(os.getenv("LINUX_SRE_GYM_MAX_STEPS", "12"))
@@ -110,28 +120,6 @@ def build_user_prompt(
     ).strip()
 
 
-def _heuristic_command(task_name: str, history: List[str]) -> str:
-    policies = {
-        "triage": ["ps aux", "top -bn1", "kill 4242", "free -m"],
-        "optimization": [
-            "vmstat",
-            "sysctl vm.swappiness",
-            "sysctl -w vm.swappiness=10",
-            "echo Y > /sys/module/zswap/parameters/enabled",
-            "vmstat",
-        ],
-        "security": [
-            "sysctl -a | grep rp_filter",
-            "sysctl -w net.ipv4.conf.all.rp_filter=1",
-            "sysctl -w net.ipv4.conf.default.rp_filter=1",
-            "sysctl -a | grep rp_filter",
-        ],
-    }
-    sequence = policies.get(task_name, ["ps aux"])
-    index = min(len(history), len(sequence) - 1)
-    return sequence[index]
-
-
 async def get_model_command(
     client: AsyncOpenAI,
     task_name: str,
@@ -142,20 +130,17 @@ async def get_model_command(
     history: List[str],
 ) -> str:
     prompt = build_user_prompt(task_name, step, stdout, stderr, score, history)
-    try:
-        completion = await client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-        )
-        content = (completion.choices[0].message.content or "").strip()
-        return _normalize_action(content) if content else _heuristic_command(task_name, history)
-    except Exception:
-        return _heuristic_command(task_name, history)
+    completion = await client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+    )
+    content = (completion.choices[0].message.content or "").strip()
+    return _normalize_action(content) if content else ""
 
 
 def create_env() -> LinuxSreGymEnv:
@@ -204,7 +189,6 @@ async def run_episode(client: AsyncOpenAI, env: LinuxSreGymEnv) -> float:
             rewards.append(reward)
             steps_taken = step
             score = float(getattr(observation, "reward_breakdown", observation).score) if hasattr(getattr(observation, "reward_breakdown", None), "score") else float(observation.metadata.get("score", score))
-            print(f"DEBUG: step={step} command={command} metadata={observation.metadata} computed_score={score}")
             stdout = observation.stdout
             stderr = observation.stderr
             error = observation.stderr or observation.metadata.get("last_action_error")

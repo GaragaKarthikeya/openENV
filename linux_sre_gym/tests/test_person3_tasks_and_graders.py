@@ -12,8 +12,9 @@ def test_triage_state_contains_runaway_process() -> None:
     state = build_triage_state()
 
     assert state.current_task == "triage"
-    assert state.processes[RUNAWAY_PID]["cpu_percent"] >= 300
-    assert state.processes[RUNAWAY_PID]["memory_mb"] >= 4096
+    runaway_proc = next(p for p in state.processes if (p.get("pid") if isinstance(p, dict) else getattr(p, "pid", None)) == RUNAWAY_PID)
+    assert (runaway_proc.get("cpu_percent", 0) if isinstance(runaway_proc, dict) else getattr(runaway_proc, "cpu_percent", 0)) >= 300
+    assert (runaway_proc.get("memory_mb", 0) if isinstance(runaway_proc, dict) else getattr(runaway_proc, "memory_mb", 0)) >= 4096
     assert state.runtime_flags["runaway_process_present"] is True
     assert "/proc/meminfo" in state.filesystem
 
@@ -21,7 +22,7 @@ def test_triage_state_contains_runaway_process() -> None:
 def test_triage_grader_rewards_resolution_and_penalizes_repetition() -> None:
     state = build_triage_state()
     state.command_history = ["ps aux", "cat /proc/meminfo", f"kill {RUNAWAY_PID}", "ps aux"]
-    del state.processes[RUNAWAY_PID]
+    state.processes = [p for p in state.processes if (p.get("pid") if isinstance(p, dict) else getattr(p, "pid", None)) != RUNAWAY_PID]
     state.runtime_flags["runaway_process_present"] = False
     state.runtime_flags["thrashing"] = False
     state.runtime_flags["load_average_1m"] = 0.42
@@ -75,7 +76,7 @@ def test_security_state_starts_with_rp_filter_disabled() -> None:
     assert state.current_task == "security"
     assert state.sysctl["net.ipv4.conf.all.rp_filter"] == 0
     assert state.sysctl["net.ipv4.conf.default.rp_filter"] == 0
-    assert state.network["spoofing_protection_enabled"] is False
+    assert state.runtime_flags["spoofing_protection_enabled"] is False
 
 
 def test_security_grader_rewards_hardening_and_penalizes_unsafe_network_changes() -> None:
@@ -88,9 +89,9 @@ def test_security_grader_rewards_hardening_and_penalizes_unsafe_network_changes(
     ]
     state.sysctl["net.ipv4.conf.all.rp_filter"] = 1
     state.sysctl["net.ipv4.conf.default.rp_filter"] = 1
-    state.network["rp_filter_all"] = 1
-    state.network["rp_filter_default"] = 1
-    state.network["spoofing_protection_enabled"] = True
+    state.runtime_flags["rp_filter_all"] = 1
+    state.runtime_flags["rp_filter_default"] = 1
+    state.runtime_flags["spoofing_protection_enabled"] = True
     state.is_resolved = True
 
     grader = SecurityGrader()

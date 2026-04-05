@@ -77,7 +77,7 @@ def dangerous_command_penalty(commands: Sequence[str]) -> float:
 
 
 def repetition_penalty(commands: Sequence[str]) -> float:
-    return min(0.12, 0.02 * count_repeated_commands(commands))
+    return 0.05 * count_repeated_commands(commands)
 
 
 def sysctl_value(state: Any, key: str, default: Any = None) -> Any:
@@ -97,11 +97,36 @@ def truthy_kernel_value(value: Any) -> bool:
 
 
 def process_table(state: Any) -> dict[int, dict[str, Any]]:
-    processes = read_mapping(state, "processes")
+    processes = read_state_value(state, "processes", {})
     normalized: dict[int, dict[str, Any]] = {}
-    for pid, details in processes.items():
-        try:
-            normalized[int(pid)] = dict(details)
-        except (TypeError, ValueError):
-            continue
+    
+    if isinstance(processes, Mapping):
+        for pid, details in processes.items():
+            try:
+                normalized[int(pid)] = dict(details)
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(processes, Sequence):
+        for p in processes:
+            try:
+                if isinstance(p, Mapping):
+                    pid = p.get("pid")
+                    details = dict(p)
+                else:
+                    pid = getattr(p, "pid", None)
+                    details = {
+                        "pid": pid,
+                        "name": getattr(p, "name", ""),
+                        "user": getattr(p, "user", ""),
+                        "cpu_percent": getattr(p, "cpu_percent", 0.0),
+                        "memory_mb": getattr(p, "memory_mb", 0),
+                        "status": getattr(p, "status", ""),
+                        "killable": getattr(p, "killable", True),
+                        "command": getattr(p, "command", ""),
+                        "nice": getattr(p, "nice", 0),
+                    }
+                if pid is not None:
+                    normalized[int(pid)] = details
+            except (TypeError, ValueError):
+                continue
     return normalized

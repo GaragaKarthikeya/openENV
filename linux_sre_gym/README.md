@@ -283,16 +283,27 @@ openenv push
 
 Or build and push manually using your Space's Docker workflow.
 
-## Baseline Score Expectations
+## Baseline Scores
 
-Because the benchmark is deterministic, a good baseline should consistently:
+Measured on `google/gemma-4-31B-it` via HuggingFace Inference Providers (deterministic grader, `MAX_STEPS=12`):
 
-- solve Triage completely,
-- solve Optimization completely,
-- solve Security Hardening completely,
-- produce per-task scores close to `1.0` when the correct command sequence is used.
+| Task | Score | Steps | Success |
+|------|-------|-------|---------|
+| Triage | **1.000** | 2 | PASS |
+| Optimization | **0.600-0.780** | 12 | FAIL |
+| Security | **0.900-1.000** | 3-5 | PASS |
 
-Exact scores depend on model behavior, but the grader itself is deterministic for a fixed trajectory.
+Measured on `Qwen/Qwen2.5-72B-Instruct`:
+
+| Task | Score | Steps | Success |
+|------|-------|-------|---------|
+| Triage | **1.000** | 2-3 | PASS |
+| Optimization | **0.430-0.450** | 12 | FAIL |
+| Security | **0.480-0.980** | 3-4 | PASS |
+
+The **Triage** and **Security** tasks are reliably solved by frontier models.
+**Optimization** is the hard task — models must diagnose the paging issue, lower `vm.swappiness`, enable `zswap`, *and* verify with `vmstat`, without repeating commands.
+The repetition penalty (`-0.05` per duplicate command, uncapped) is the primary failure mode for models that loop diagnostics.
 
 ## Safety Model
 
