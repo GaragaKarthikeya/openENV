@@ -83,6 +83,7 @@ VERIFICATION_COMMANDS = {
     },
 }
 MAX_SCORE = 1.0
+OPEN_SCORE_EPSILON = 0.001
 
 
 @dataclass
@@ -96,6 +97,8 @@ class CommandResult:
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+    if low == 0.0 and high == 1.0:
+        return max(OPEN_SCORE_EPSILON, min(high - OPEN_SCORE_EPSILON, float(value)))
     return max(low, min(high, value))
 
 
@@ -818,7 +821,7 @@ class LinuxSreGymEnvironment(Environment):
             metadata={
                 "episode_id": self._state.episode_id,
                 "task_description": self._state.task_description,
-                "score": round(self._state.completion_score, 3),
+                "score": self._state.completion_score,
                 "is_resolved": self._state.is_resolved,
                 "external_router": self._external_router_active,
                 "external_grader": self._external_grader_active,

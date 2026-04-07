@@ -16,10 +16,12 @@ DANGEROUS_COMMAND_MARKERS = (
     "iptables -F",
     "nft flush ruleset",
 )
+OPEN_SCORE_EPSILON = 0.001
 
 
 def clamp_score(score: float) -> float:
-    return max(0.0, min(1.0, round(score, 4)))
+    bounded = max(OPEN_SCORE_EPSILON, min(1.0 - OPEN_SCORE_EPSILON, float(score)))
+    return round(bounded, 4)
 
 
 def read_state_value(state: Any, field_name: str, default: Any = None) -> Any:

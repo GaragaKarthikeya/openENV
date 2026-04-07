@@ -1,4 +1,5 @@
 from linux_sre_gym.graders import OptimizationGrader, SecurityGrader, TriageGrader
+from linux_sre_gym.graders.common import clamp_score
 from linux_sre_gym.tasks import (
     RUNAWAY_PID,
     TARGET_SWAPPINESS,
@@ -32,7 +33,7 @@ def test_triage_grader_rewards_resolution_and_penalizes_repetition() -> None:
     score = grader.grade(state)
 
     assert isinstance(score, float)
-    assert 0.0 <= score <= 1.0
+    assert 0.0 < score < 1.0
     assert score >= 0.85
     assert grader.grade(state, action_history=["ps aux"] * 5) < score
 
@@ -66,7 +67,7 @@ def test_optimization_grader_scores_completed_fix() -> None:
     score = OptimizationGrader().grade(state)
 
     assert isinstance(score, float)
-    assert 0.0 <= score <= 1.0
+    assert 0.0 < score < 1.0
     assert score >= 0.95
 
 
@@ -102,6 +103,13 @@ def test_security_grader_rewards_hardening_and_penalizes_unsafe_network_changes(
     )
 
     assert isinstance(score, float)
-    assert 0.0 <= score <= 1.0
+    assert 0.0 < score < 1.0
     assert score >= 0.95
     assert unsafe_score < score
+
+
+def test_clamp_score_excludes_closed_interval_endpoints() -> None:
+    assert clamp_score(-5.0) == 0.001
+    assert clamp_score(0.0) == 0.001
+    assert clamp_score(1.0) == 0.999
+    assert clamp_score(7.0) == 0.999
