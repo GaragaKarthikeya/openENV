@@ -9,3 +9,4 @@ __pycache__/
 venv/
 .venv/
 linux_sre_gym/**/__pycache__/
+.codex/
