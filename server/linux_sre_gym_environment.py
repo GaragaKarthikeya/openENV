@@ -60,9 +60,13 @@ DISCOVERY_COMMANDS = {
     "triage": {"ps aux", "top -bn1", "free -m", "cat /proc/meminfo", "cat /proc/loadavg"},
     "optimization": {
         "vmstat",
+        "free -m",
         "cat /proc/meminfo",
         "cat /proc/swaps",
         "sysctl vm.swappiness",
+        "sysctl -a | grep vm.swappiness",
+        "cat /proc/sys/vm/swappiness",
+        "sysctl -a | grep zswap",
         "cat /sys/module/zswap/parameters/enabled",
     },
     "security": {
@@ -75,7 +79,14 @@ DISCOVERY_COMMANDS = {
 }
 VERIFICATION_COMMANDS = {
     "triage": {"ps aux", "top -bn1", "free -m"},
-    "optimization": {"vmstat", "sysctl vm.swappiness", "cat /sys/module/zswap/parameters/enabled"},
+    "optimization": {
+        "vmstat",
+        "sysctl vm.swappiness",
+        "sysctl -a | grep vm.swappiness",
+        "cat /proc/sys/vm/swappiness",
+        "sysctl -a | grep zswap",
+        "cat /sys/module/zswap/parameters/enabled",
+    },
     "security": {
         "sysctl net.ipv4.conf.all.rp_filter",
         "sysctl net.ipv4.conf.default.rp_filter",
@@ -107,6 +118,10 @@ def _safe_int(raw: str, default: int = 0) -> int:
         return int(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_command(command: str) -> str:
+    return " ".join(command.strip().lower().split())
 
 
 class LinuxSreGymEnvironment(Environment):
@@ -390,7 +405,7 @@ class LinuxSreGymEnvironment(Environment):
                 return "18.24 17.90 12.40 3/900 4242"
             return "0.72 0.65 0.50 1/900 3100"
         if state.task_id == "optimization":
-            if state.sysctl.get("vm.swappiness") == "95" or state.sysctl.get("vm.zswap_enabled") != "Y":
+            if state.sysctl.get("vm.swappiness") == "95" or not self._optimization_zswap_enabled(state):
                 return "7.40 6.90 5.80 2/700 1200"
             return "1.10 0.95 0.80 1/700 1200"
         return "0.23 0.19 0.15 1/420 2200"
@@ -402,7 +417,7 @@ class LinuxSreGymEnvironment(Environment):
             avail_kb = 262_144
             dirty_kb = 28_672
         elif state.task_id == "optimization" and (
-            state.sysctl.get("vm.swappiness") == "95" or state.sysctl.get("vm.zswap_enabled") != "Y"
+            state.sysctl.get("vm.swappiness") == "95" or not self._optimization_zswap_enabled(state)
         ):
             free_kb = 524_288
             avail_kb = 786_432
@@ -427,7 +442,7 @@ class LinuxSreGymEnvironment(Environment):
 
     def _render_swaps(self, state: LinuxSreGymState) -> str:
         if state.task_id == "optimization":
-            used = "1572864" if state.sysctl.get("vm.swappiness") == "95" or state.sysctl.get("vm.zswap_enabled") != "Y" else "262144"
+            used = "1572864" if state.sysctl.get("vm.swappiness") == "95" or not self._optimization_zswap_enabled(state) else "262144"
             return "\n".join(
                 [
                     "Filename\t\t\tType\t\tSize\tUsed\tPriority",
@@ -447,13 +462,15 @@ class LinuxSreGymEnvironment(Environment):
         if state.task_id == "optimization":
             return (
                 int(state.sysctl.get("vm.swappiness", "60")) <= 20
-                and state.sysctl.get("vm.zswap_enabled") == "Y"
-                and any(cmd in DISCOVERY_COMMANDS["optimization"] for cmd in state.seen_diagnostics)
+                and self._optimization_zswap_enabled(state)
+                and any(self._is_discovery_command("optimization", cmd) for cmd in state.seen_diagnostics)
+                and self._has_post_fix_verification(state, VERIFICATION_COMMANDS["optimization"])
                 and not state.terminal_locked
             )
         return (
             state.sysctl.get("net.ipv4.conf.all.rp_filter") == "1"
             and state.sysctl.get("net.ipv4.conf.default.rp_filter") == "1"
+            and self._has_post_fix_verification(state, VERIFICATION_COMMANDS["security"])
             and not state.terminal_locked
         )
 
@@ -464,36 +481,116 @@ class LinuxSreGymEnvironment(Environment):
             return _clamp(external_grade, 0.0, MAX_SCORE)
 
         if state.task_id == "triage":
-            discovery = 0.2 if any(cmd in DISCOVERY_COMMANDS["triage"] for cmd in state.seen_diagnostics) else 0.0
+            discovery = 0.2 if any(self._is_discovery_command("triage", cmd) for cmd in state.seen_diagnostics) else 0.0
             remediation = 0.4 if "4242" not in state.processes else 0.0
             stability = 0.2 if "4242" not in state.processes else 0.0
             verification = 0.2 if self._has_post_fix_verification(state, VERIFICATION_COMMANDS["triage"]) else 0.0
             penalty = 0.5 if state.terminal_locked else 0.0
         elif state.task_id == "optimization":
-            discovery_count = sum(1 for cmd in state.seen_diagnostics if cmd in DISCOVERY_COMMANDS["optimization"])
+            discovery_count = sum(1 for cmd in state.seen_diagnostics if self._is_discovery_command("optimization", cmd))
             discovery = min(0.2, discovery_count * 0.05)
-            remediation = 0.3 if int(state.sysctl.get("vm.swappiness", "60")) <= 20 else 0.0
-            stability = 0.3 if state.sysctl.get("vm.zswap_enabled") == "Y" else 0.0
+            remediation = 0.25 if int(state.sysctl.get("vm.swappiness", "60")) <= 20 else 0.0
+            stability = 0.2 if self._optimization_zswap_enabled(state) else 0.0
             verification = 0.2 if self._has_post_fix_verification(state, VERIFICATION_COMMANDS["optimization"]) else 0.0
+            health = 0.15 if not state.network.get("thrashing", True) else 0.0
             penalty = 0.4 if state.terminal_locked else 0.0
         else:
-            discovery_count = sum(1 for cmd in state.seen_diagnostics if cmd in DISCOVERY_COMMANDS["security"])
+            discovery_count = sum(1 for cmd in state.seen_diagnostics if self._is_discovery_command("security", cmd))
             discovery = min(0.2, discovery_count * 0.1)
             remediation = 0.3 if state.sysctl.get("net.ipv4.conf.all.rp_filter") == "1" else 0.0
-            stability = 0.3 if state.sysctl.get("net.ipv4.conf.default.rp_filter") == "1" else 0.0
+            stability = 0.2 if state.sysctl.get("net.ipv4.conf.default.rp_filter") == "1" else 0.0
             verification = 0.2 if self._has_post_fix_verification(state, VERIFICATION_COMMANDS["security"]) else 0.0
+            health = 0.15 if state.network.get("spoofing_protection_enabled") else 0.0
             penalty = 0.4 if state.terminal_locked else 0.0
 
         repeat_penalty = min(0.1, self._repeat_count(state.command_history) * 0.02)
+        if state.task_id == "optimization":
+            return _clamp(discovery + remediation + stability + health + verification - penalty - repeat_penalty)
+        if state.task_id == "security":
+            return _clamp(discovery + remediation + stability + health + verification - penalty - repeat_penalty)
         return _clamp(discovery + remediation + stability + verification - penalty - repeat_penalty)
+
+    def _optimization_zswap_enabled(self, state: LinuxSreGymState) -> bool:
+        value = state.filesystem.get("/sys/module/zswap/parameters/enabled")
+        if value is not None:
+            return str(value).strip().upper() in {"Y", "1", "YES", "TRUE", "ON"}
+
+        value = state.sysctl.get("vm.zswap_enabled")
+        if value is not None:
+            return str(value).strip().upper() in {"Y", "1", "YES", "TRUE", "ON"}
+
+        return False
 
     def _has_post_fix_verification(self, state: LinuxSreGymState, commands: Iterable[str]) -> bool:
         if not state.command_history:
             return False
         if state.task_id == "triage" and "4242" in state.processes:
             return False
-        history_tail = state.command_history[-3:]
-        return any(command in history_tail for command in commands)
+        mutation_index = self._last_mutation_index(state)
+        if mutation_index is None:
+            return False
+        return any(
+            self._is_verification_command(state.task_id, command)
+            for command in state.command_history[mutation_index + 1 :]
+        )
+
+    def _last_mutation_index(self, state: LinuxSreGymState) -> Optional[int]:
+        history = state.command_history
+        if state.task_id == "triage":
+            for index in range(len(history) - 1, -1, -1):
+                normalized = _normalize_command(history[index])
+                if normalized.startswith("kill ") or normalized.startswith("pkill "):
+                    return index
+            return None
+        if state.task_id == "optimization":
+            for index in range(len(history) - 1, -1, -1):
+                normalized = _normalize_command(history[index])
+                if (
+                    normalized.startswith("sysctl -w vm.swappiness=")
+                    or normalized.startswith("sysctl -w vm.zswap_enabled=")
+                    or normalized == "echo y > /sys/module/zswap/parameters/enabled"
+                ):
+                    return index
+            return None
+        for index in range(len(history) - 1, -1, -1):
+            normalized = _normalize_command(history[index])
+            if normalized.startswith("sysctl -w net.ipv4.conf.") or normalized.startswith("echo 1 > /proc/sys/net/ipv4/conf/"):
+                return index
+        return None
+
+    def _is_security_rp_filter_probe(self, command: str) -> bool:
+        normalized = _normalize_command(command)
+        return (
+            normalized.startswith("sysctl net.ipv4.conf.all.rp_filter")
+            or normalized.startswith("sysctl net.ipv4.conf.default.rp_filter")
+            or normalized.startswith("cat /proc/sys/net/ipv4/conf/all/rp_filter")
+            or normalized.startswith("cat /proc/sys/net/ipv4/conf/default/rp_filter")
+            or (normalized.startswith("sysctl -a | grep") and "rp_filter" in normalized)
+        )
+
+    def _is_discovery_command(self, task_id: str, command: str) -> bool:
+        normalized = _normalize_command(command)
+        if task_id == "security":
+            return self._is_security_rp_filter_probe(normalized)
+        if task_id == "optimization":
+            return (
+                normalized in DISCOVERY_COMMANDS[task_id]
+                or normalized.startswith("sysctl -a | grep vm.swappiness")
+                or normalized.startswith("sysctl -a | grep zswap")
+            )
+        return normalized in DISCOVERY_COMMANDS[task_id]
+
+    def _is_verification_command(self, task_id: str, command: str) -> bool:
+        normalized = _normalize_command(command)
+        if task_id == "security":
+            return self._is_security_rp_filter_probe(normalized)
+        if task_id == "optimization":
+            return (
+                normalized in VERIFICATION_COMMANDS[task_id]
+                or normalized.startswith("sysctl -a | grep vm.swappiness")
+                or normalized.startswith("sysctl -a | grep zswap")
+            )
+        return normalized in VERIFICATION_COMMANDS[task_id]
 
     def _repeat_count(self, history: list[str]) -> int:
         counts = Counter(history)
@@ -791,8 +888,9 @@ class LinuxSreGymEnvironment(Environment):
         )
 
     def _discovery_reward(self, command: str) -> float:
-        if command in DISCOVERY_COMMANDS[self._state.task_id] and command not in self._state.seen_diagnostics:
-            self._state.seen_diagnostics.append(command)
+        normalized = _normalize_command(command)
+        if self._is_discovery_command(self._state.task_id, normalized) and normalized not in self._state.seen_diagnostics:
+            self._state.seen_diagnostics.append(normalized)
             return 0.05
         return 0.0
 

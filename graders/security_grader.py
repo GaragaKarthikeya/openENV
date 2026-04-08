@@ -27,9 +27,11 @@ MUTATION_MARKERS = (
     "echo",
 )
 VERIFY_MARKERS = (
-    "sysctl -a",
+    "sysctl -a | grep",
     "sysctl net.ipv4.conf",
     "grep rp_filter",
+    "grep net.ipv4.conf.all.rp_filter",
+    "grep net.ipv4.conf.default.rp_filter",
     "cat /proc/sys/net/ipv4/conf/all/rp_filter",
     "cat /proc/sys/net/ipv4/conf/default/rp_filter",
 )
@@ -62,9 +64,9 @@ class SecurityGrader:
         ):
             score += 0.25
         if bool(runtime_flags.get("spoofing_protection_enabled", False)) or self._all_filters_enabled(state):
-            score += 0.25
+            score += 0.15
         if self._verified_after_mutation(commands):
-            score += 0.1
+            score += 0.2
 
         score -= dangerous_command_penalty(commands)
         score -= repetition_penalty(commands)

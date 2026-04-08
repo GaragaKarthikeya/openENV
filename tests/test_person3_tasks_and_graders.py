@@ -1,5 +1,7 @@
 from linux_sre_gym.graders import OptimizationGrader, SecurityGrader, TriageGrader
 from linux_sre_gym.graders.common import clamp_score
+from linux_sre_gym.server.linux_sre_gym_environment import LinuxSreGymEnvironment
+from linux_sre_gym import LinuxSreGymAction
 from linux_sre_gym.tasks import (
     RUNAWAY_PID,
     TARGET_SWAPPINESS,
@@ -54,7 +56,7 @@ def test_optimization_grader_scores_completed_fix() -> None:
         "vmstat",
         "sysctl vm.swappiness",
         "sysctl -w vm.swappiness=10",
-        "echo 1 > /sys/module/zswap/parameters/enabled",
+        "echo Y > /sys/module/zswap/parameters/enabled",
         "cat /sys/module/zswap/parameters/enabled",
     ]
     state.sysctl["vm.swappiness"] = TARGET_SWAPPINESS
@@ -69,6 +71,85 @@ def test_optimization_grader_scores_completed_fix() -> None:
     assert isinstance(score, float)
     assert 0.0 < score < 1.0
     assert score >= 0.95
+
+
+def test_optimization_episode_resolves_after_correct_fix_sequence(monkeypatch) -> None:
+    monkeypatch.setenv("LINUX_SRE_GYM_DEFAULT_TASK", "optimization")
+    env = LinuxSreGymEnvironment()
+
+    observation = env.reset()
+    assert observation.current_task == "optimization"
+
+    for command in [
+        "vmstat",
+        "sysctl vm.swappiness",
+        "sysctl -w vm.swappiness=10",
+        "echo Y > /sys/module/zswap/parameters/enabled",
+        "cat /sys/module/zswap/parameters/enabled",
+    ]:
+        observation = env.step(LinuxSreGymAction(command=command))
+
+    assert observation.done is True
+    assert observation.metadata["is_resolved"] is True
+    assert observation.metadata["score"] >= 0.95
+    assert env.state.filesystem["/sys/module/zswap/parameters/enabled"].strip() == "Y"
+    assert int(env.state.sysctl["vm.swappiness"]) == TARGET_SWAPPINESS
+
+
+def test_optimization_episode_requires_post_fix_verification(monkeypatch) -> None:
+    monkeypatch.setenv("LINUX_SRE_GYM_DEFAULT_TASK", "optimization")
+    env = LinuxSreGymEnvironment()
+
+    observation = env.reset()
+    for command in [
+        "vmstat",
+        "sysctl vm.swappiness",
+        "sysctl -w vm.swappiness=10",
+        "echo Y > /sys/module/zswap/parameters/enabled",
+    ]:
+        observation = env.step(LinuxSreGymAction(command=command))
+
+    assert observation.done is False
+    assert observation.metadata["is_resolved"] is False
+    assert observation.metadata["score"] < 0.85
+
+
+def test_optimization_episode_accepts_reasonable_probe_variants(monkeypatch) -> None:
+    monkeypatch.setenv("LINUX_SRE_GYM_DEFAULT_TASK", "optimization")
+    env = LinuxSreGymEnvironment()
+
+    observation = env.reset()
+    for command in [
+        "sysctl -a | grep vm.swappiness",
+        "sysctl -w vm.swappiness=10",
+        "sysctl -a | grep zswap",
+        "echo Y > /sys/module/zswap/parameters/enabled",
+        "cat /proc/sys/vm/swappiness",
+    ]:
+        observation = env.step(LinuxSreGymAction(command=command))
+
+    assert observation.done is True
+    assert observation.metadata["is_resolved"] is True
+    assert observation.metadata["score"] >= 0.9
+
+
+def test_triage_episode_resolves_after_runaway_process_kill(monkeypatch) -> None:
+    monkeypatch.setenv("LINUX_SRE_GYM_DEFAULT_TASK", "triage")
+    env = LinuxSreGymEnvironment()
+
+    observation = env.reset()
+    assert observation.current_task == "triage"
+
+    for command in [
+        "ps aux",
+        f"kill {RUNAWAY_PID}",
+    ]:
+        observation = env.step(LinuxSreGymAction(command=command))
+
+    assert observation.done is True
+    assert observation.metadata["is_resolved"] is True
+    assert observation.metadata["score"] >= 0.95
+    assert str(RUNAWAY_PID) not in env.state.processes
 
 
 def test_security_state_starts_with_rp_filter_disabled() -> None:
@@ -106,6 +187,45 @@ def test_security_grader_rewards_hardening_and_penalizes_unsafe_network_changes(
     assert 0.0 < score < 1.0
     assert score >= 0.95
     assert unsafe_score < score
+
+
+def test_security_episode_resolves_after_rp_filter_hardening(monkeypatch) -> None:
+    monkeypatch.setenv("LINUX_SRE_GYM_DEFAULT_TASK", "security")
+    env = LinuxSreGymEnvironment()
+
+    observation = env.reset()
+    assert observation.current_task == "security"
+
+    for command in [
+        "sysctl -a | grep net.ipv4.conf.all.rp_filter",
+        "sysctl -w net.ipv4.conf.all.rp_filter=1",
+        "sysctl -w net.ipv4.conf.default.rp_filter=1",
+        "sysctl -a | grep net.ipv4.conf.default.rp_filter",
+    ]:
+        observation = env.step(LinuxSreGymAction(command=command))
+
+    assert observation.done is True
+    assert observation.metadata["is_resolved"] is True
+    assert observation.metadata["score"] >= 0.9
+    assert env.state.sysctl["net.ipv4.conf.all.rp_filter"] == "1"
+    assert env.state.sysctl["net.ipv4.conf.default.rp_filter"] == "1"
+
+
+def test_security_episode_requires_post_fix_verification(monkeypatch) -> None:
+    monkeypatch.setenv("LINUX_SRE_GYM_DEFAULT_TASK", "security")
+    env = LinuxSreGymEnvironment()
+
+    observation = env.reset()
+    for command in [
+        "sysctl -a | grep net.ipv4.conf.all.rp_filter",
+        "sysctl -w net.ipv4.conf.all.rp_filter=1",
+        "sysctl -w net.ipv4.conf.default.rp_filter=1",
+    ]:
+        observation = env.step(LinuxSreGymAction(command=command))
+
+    assert observation.done is False
+    assert observation.metadata["is_resolved"] is False
+    assert observation.metadata["score"] < 0.85
 
 
 def test_clamp_score_excludes_closed_interval_endpoints() -> None:

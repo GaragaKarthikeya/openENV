@@ -5,6 +5,11 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+outputs/*
+!outputs/.gitkeep
+outputs/.pytest_cache/
+pytest-cache-files-*/
+*.egg-info/
 .uv/
 venv/
 .venv/

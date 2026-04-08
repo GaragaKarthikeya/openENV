@@ -182,6 +182,14 @@ If you want the full dev toolchain:
 pip install -e ".[dev]"
 ```
 
+For local validation and tests, install the dev extras so `pytest` is available in the same environment as `openenv`.
+
+Run the test suite from the repo root:
+
+```bash
+pytest -q
+```
+
 ## Run the Server Locally
 
 ```bash
@@ -260,7 +268,7 @@ Optional:
 - `LINUX_SRE_GYM_MAX_STEPS`
 - `SUCCESS_SCORE_THRESHOLD`
 
-Run it from the repo root:
+Run it from the repo root. The script bootstraps the local package automatically, so it works both from a raw checkout and after `pip install -e .`:
 
 ```bash
 python3 inference.py
@@ -285,25 +293,21 @@ Or build and push manually using your Space's Docker workflow.
 
 ## Baseline Scores
 
-Measured on `google/gemma-4-31B-it` via HuggingFace Inference Providers (deterministic grader, `MAX_STEPS=12`):
+Measured locally against the final benchmark via Hugging Face Inference Providers on 8 April 2026 with `MAX_STEPS=12` and `SUCCESS_SCORE_THRESHOLD=0.85`. The table below includes only models that completed all 3 tasks.
 
-| Task | Score | Steps | Success |
-|------|-------|-------|---------|
-| Triage | **1.000** | 2 | PASS |
-| Optimization | **0.600-0.780** | 12 | FAIL |
-| Security | **0.900-1.000** | 3-5 | PASS |
+| Model | Triage | Security | Optimization | Avg | Outcome |
+|------|-------|----------|--------------|-----|---------|
+| `google/gemma-4-31B-it` | 0.999 | 0.950 | 0.950 | 0.966 | Solves all 3 tasks |
+| `Qwen/Qwen2.5-72B-Instruct` | 0.999 | 0.900 | 0.650 | 0.850 | Solves triage + security, fails optimization |
+| `Qwen/Qwen3-235B-A22B-Instruct-2507` | 0.999 | 0.800 | 0.950 | 0.916 | Solves triage + optimization, fails security |
 
-Measured on `Qwen/Qwen2.5-72B-Instruct`:
+Takeaways:
 
-| Task | Score | Steps | Success |
-|------|-------|-------|---------|
-| Triage | **1.000** | 2-3 | PASS |
-| Optimization | **0.430-0.450** | 12 | FAIL |
-| Security | **0.480-0.980** | 3-4 | PASS |
+- **Triage** is reliably solved by strong instruction models.
+- **Security** is a medium task because the agent must both harden `rp_filter` and verify the fix afterward.
+- **Optimization** is still challenging, but fairer now that sensible paging and zswap probes receive reward credit.
 
-The **Triage** and **Security** tasks are reliably solved by frontier models.
-**Optimization** is the hard task — models must diagnose the paging issue, lower `vm.swappiness`, enable `zswap`, *and* verify with `vmstat`, without repeating commands.
-The repetition penalty (`-0.05` per duplicate command, uncapped) is the primary failure mode for models that loop diagnostics.
+The most common failure modes are weak verification discipline on `security` and unnecessary or repetitive sysctl tuning before final verification on `optimization`.
 
 ## Safety Model
 

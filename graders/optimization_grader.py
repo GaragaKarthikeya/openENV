@@ -19,9 +19,14 @@ from linux_sre_gym.graders.common import (
 
 DIAGNOSTIC_MARKERS = (
     "vmstat",
+    "free -m",
     "cat /proc/swaps",
     "cat /proc/meminfo",
     "sysctl vm.swappiness",
+    "sysctl -a | grep vm.swappiness",
+    "cat /proc/sys/vm/swappiness",
+    "sysctl -a | grep zswap",
+    "cat /sys/module/zswap/parameters/enabled",
 )
 MUTATION_MARKERS = (
     "sysctl -w",
@@ -29,7 +34,9 @@ MUTATION_MARKERS = (
 )
 VERIFY_MARKERS = (
     "sysctl vm.swappiness",
+    "sysctl -a | grep vm.swappiness",
     "cat /proc/sys/vm/swappiness",
+    "sysctl -a | grep zswap",
     "cat /sys/module/zswap/parameters/enabled",
     "vmstat",
 )
@@ -48,13 +55,13 @@ class OptimizationGrader:
         if self._diagnosed_before_mutation(commands):
             score += 0.2
         if self._swappiness_is_fixed(state, runtime_flags):
-            score += 0.3
-        if self._zswap_enabled(state, runtime_flags):
             score += 0.25
+        if self._zswap_enabled(state, runtime_flags):
+            score += 0.2
         if not bool(runtime_flags.get("thrashing", True)):
             score += 0.15
         if self._verified_after_mutation(commands):
-            score += 0.1
+            score += 0.2
 
         score -= dangerous_command_penalty(commands)
         score -= repetition_penalty(commands)
