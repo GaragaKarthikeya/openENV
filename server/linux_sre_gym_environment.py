@@ -51,11 +51,6 @@ TASK_DESCRIPTIONS = {
         "harden reverse-path filtering without breaking unrelated settings."
     ),
 }
-TASK_HINTS = {
-    "triage": "Start with process and memory inspection commands such as ps, top, and free -m.",
-    "optimization": "Use vmstat, /proc/meminfo, /proc/swaps, and sysctl to inspect paging pressure. Zswap is also a useful tuning mechanism.",
-    "security": "Inspect rp_filter under /proc/sys or via sysctl before writing any networking setting.",
-}
 DISCOVERY_COMMANDS = {
     "triage": {"ps aux", "top -bn1", "free -m", "cat /proc/meminfo", "cat /proc/loadavg"},
     "optimization": {
@@ -155,7 +150,7 @@ class LinuxSreGymEnvironment(Environment):
             reward=0.0,
             done=False,
             reason="Episode reset.",
-            hint=TASK_HINTS.get(task_id),
+            hint=None,
         )
 
     def step(self, action: LinuxSreGymAction) -> LinuxSreGymObservation:  # type: ignore[override]
@@ -167,7 +162,7 @@ class LinuxSreGymEnvironment(Environment):
                 reward=0.0,
                 done=True,
                 reason="Episode already terminated by unsafe action.",
-                hint=TASK_HINTS.get(self._state.task_id),
+                hint=None,
             )
 
         command = action.command.strip()
@@ -179,7 +174,7 @@ class LinuxSreGymEnvironment(Environment):
                 reward=-0.05,
                 done=False,
                 reason="Empty commands are not useful for diagnosis.",
-                hint=TASK_HINTS.get(self._state.task_id),
+                hint=None,
             )
 
         self._state.step_count += 1
@@ -224,7 +219,7 @@ class LinuxSreGymEnvironment(Environment):
             reward=breakdown.total,
             done=done,
             reason=result.reward_reason,
-            hint=self._hint_after_step(done=done, exit_code=result.exit_code),
+            hint=None,
         )
 
     @property
@@ -926,13 +921,6 @@ class LinuxSreGymEnvironment(Environment):
                 "max_steps": self._max_steps,
             },
         )
-
-    def _hint_after_step(self, *, done: bool, exit_code: int) -> Optional[str]:
-        if done and not self._state.is_resolved:
-            return "Reset and try a safer, more diagnostic-first remediation path."
-        if exit_code != 0:
-            return TASK_HINTS.get(self._state.task_id)
-        return None
 
     def _load_task_builder(self, task_id: str) -> Optional[Callable[..., Any]]:
         module_names = [f"..tasks.{task_id}", f"tasks.{task_id}"]

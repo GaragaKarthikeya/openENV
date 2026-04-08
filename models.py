@@ -57,7 +57,7 @@ class LinuxSreGymObservation(BaseModel):
     )
     available_hint: Optional[str] = Field(
         default=None,
-        description="Optional hint shown to the agent, usually on reset or after repeated mistakes.",
+        description="Reserved compatibility field. Always null for autonomous evaluation.",
     )
     reward: float = Field(default=0.0, description="Net reward for the latest step.")
     done: bool = Field(default=False, description="Whether the current episode has ended.")

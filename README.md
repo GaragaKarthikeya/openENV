@@ -99,7 +99,7 @@ Supported command families in the built-in simulator:
 - `current_task: str`
 - `step_count: int`
 - `last_reward_reason: str`
-- `available_hint: str | None`
+- `available_hint: str | None` (always `null` in the final benchmark)
 - `reward: float`
 - `done: bool`
 - `reward_breakdown: LinuxSreGymRewardBreakdown`
